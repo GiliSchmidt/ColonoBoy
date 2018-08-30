@@ -1,5 +1,6 @@
 package cpu;
 
+import cpu.registers.Register;
 import cpu.registers.RegisterController;
 
 /**
@@ -8,23 +9,49 @@ import cpu.registers.RegisterController;
  */
 public class Cpu {
 
-    private final RegisterController registerController;
-    private final FlagController flagController;
     private final MemoryController memoryController;
 
+    private final Register a;
+    private final Register b;
+    private final Register d;
+    private final Register h;
+    private final Register f;
+    private final Register c;
+    private final Register e;
+    private final Register l;
+
+    //stack pointer - current stack position
+    private final Register sp;
+    //program counter - next instruction
+    private final Register pc;
+
+    private boolean flagZ;
+    private boolean flagN;
+    private boolean flagH;
+    private boolean flagC;
+
     public Cpu() {
-        this.registerController = new RegisterController();
-        this.flagController = new FlagController();
         this.memoryController = new MemoryController();
+
+        this.a = new Register();
+        this.b = new Register();
+        this.d = new Register();
+        this.h = new Register();
+        this.f = new Register();
+        this.c = new Register();
+        this.e = new Register();
+        this.l = new Register();
+        this.sp = new Register();
+        this.pc = new Register();
 
         init();
     }
 
     private void init() {
         //at startup the PC is set to 0x100
-        this.registerController.getPc().setData(0x100);
+        this.pc.setData(0x100);
         //at startup the PC is set to 0xFFFE
-        this.registerController.getSp().setData(0xFFFE);
+        this.sp.setData(0xFFFE);
     }
 
     public void executeCicle() {
@@ -35,7 +62,7 @@ public class Cpu {
     }
 
     private int fetch() {
-        int opcode = memoryController.read(registerController.getPc().getData());
+        int opcode = memoryController.read(this.pc.getData());
         //TODO: increment PC
 
         return opcode;
@@ -130,6 +157,30 @@ public class Cpu {
 
     private void consumeClock(int cicles) {
 
+    }
+
+    /**
+     * - Add n + Carry flag to A.
+     *
+     * n = A,B,C,D,E,H,L,(HL),#
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Set if carry from bit 3.
+     *
+     * C - Set if carry from bit 7.
+     */
+    private void adcAN(Register register) {
+        int newValue = a.getData() + register.getData();
+
+        flagZ = (newValue == 0);
+        flagN = false;
+        flagH = false;
+        flagC = newValue > 0xFF;
     }
 
     public void printInfo() {

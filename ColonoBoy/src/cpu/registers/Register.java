@@ -16,4 +16,8 @@ public class Register {
     public void setData(int data) {
         this.data = data;
     }
+    
+    public void add(int value){
+        this.data += value;
+    }
 }

@@ -3,13 +3,10 @@
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
-            <file>file:/C:/Users/gilis/Desktop/ColonoBoy/src/cpu/FlagController.java</file>
-            <file>file:/C:/Users/gilis/Desktop/ColonoBoy/src/cpu/Cpu.java</file>
-            <file>file:/C:/Users/gilis/Desktop/ColonoBoy/src/cpu/RegisterController.java</file>
-            <file>file:/C:/Users/gilis/Desktop/ColonoBoy/src/colonoboy/ColonoBoy.java</file>
-            <file>file:/C:/Users/gilis/Desktop/ColonoBoy/src/cpu/MemoryController.java</file>
-            <file>file:/C:/Users/gilis/Desktop/ColonoBoy/src/cpu/Operation.java</file>
-            <file>file:/C:/Users/gilis/Desktop/ColonoBoy/src/cpu/registers/Register16Bits.java</file>
+            <file>file:/C:/Users/gilis/Documents/ColonoBoy/ColonoBoy/src/cpu/FlagController.java</file>
+            <file>file:/C:/Users/gilis/Documents/ColonoBoy/ColonoBoy/src/cpu/Cpu.java</file>
+            <file>file:/C:/Users/gilis/Documents/ColonoBoy/ColonoBoy/src/cpu/registers/Register.java</file>
+            <file>file:/C:/Users/gilis/Documents/ColonoBoy/ColonoBoy/src/cpu/registers/RegisterController.java</file>
         </group>
     </open-files>
 </project-private>
