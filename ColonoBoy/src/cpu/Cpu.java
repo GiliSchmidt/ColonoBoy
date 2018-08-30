@@ -293,7 +293,58 @@ public class Cpu {
      * C - Set or reset according to operation.
      */
     private void add_SP_n() {
-        int nValue = memoryController.read(pc.getData());
+        throw new UnsupportedOperationException("Not implemented yet");
+    }
+
+    /**
+     * AND n - Logically AND n with A, result in A.
+     *
+     * n = A,B,C,D,E,H,L,(HL),#
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Set.
+     *
+     * C - Reset.
+     */
+    private void and_n(Register regOne, Register regTwo) {
+        int value;
+
+        if (regTwo == null) {
+            value = regOne.getData();
+        } else {
+            value = readCombinedRegisters(regOne, regTwo);
+        }
+
+        a.load(a.getData() & value);
+
+        flagZ = a.getData() == 0;
+        flagH = true;
+        flagN = false;
+        flagC = false;
+    }
+
+    /**
+     * BIT b,r - Test bit b in register r.
+     *
+     * b = 0-7, r = A,B,C,D,E,H,L,(HL)
+     *
+     * Flags affected:
+     *
+     * Z - Set if bit b of register r is 0.
+     *
+     * N - Reset.
+     *
+     * H - Set.
+     *
+     * C - Not affected.
+     */
+    private void bit_b_n(Register r, int b) {
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     private int readCombinedRegisters(Register upper, Register lower) {
