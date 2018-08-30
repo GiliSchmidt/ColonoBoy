@@ -1,6 +1,5 @@
 package cpu;
 
-import cpu.registers.Register;
 import cpu.registers.RegisterController;
 
 /**
@@ -174,20 +173,142 @@ public class Cpu {
      *
      * C - Set if carry from bit 7.
      */
-    private void adcAN(Register register) {
-        int newValue = a.getData() + register.getData();
+    private void adc_A_n(Register regOne, Register regTwo) {
+        int newValue, nRegValue;
+
+        if (regTwo == null) {
+            nRegValue = regOne.getData();
+        } else {
+            nRegValue = readCombinedRegisters(regOne, regTwo);
+        }
+
+        newValue = a.getData() + nRegValue;
+        newValue += flagC ? 1 : 0;
+
+        if (newValue > 0xFF) {
+            flagC = true;
+            newValue &= 0b1111_1111;
+        } else {
+            flagC = false;
+        }
 
         flagZ = (newValue == 0);
         flagN = false;
-        flagH = false;
-        flagC = newValue > 0xFF;
+        flagH = ((((a.getData() & 0xf) + (nRegValue & 0xf)) & 0x10) == 0x10);
+
+        a.load(newValue);
+    }
+
+    /**
+     * ADD A,n - Add n to A.
+     *
+     * n = A,B,C,D,E,H,L,(HL),#
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Set if carry from bit 3.
+     *
+     * C - Set if carry from bit 7.
+     *
+     */
+    private void add_A_n(Register regOne, Register regTwo) {
+        int newValue, nRegValue;
+
+        if (regTwo == null) {
+            nRegValue = regOne.getData();
+        } else {
+            nRegValue = readCombinedRegisters(regOne, regTwo);
+        }
+
+        newValue = a.getData() + nRegValue;
+        newValue += flagC ? 1 : 0;
+
+        if (newValue > 0xFF) {
+            flagC = true;
+            newValue &= 0b1111_1111;
+        } else {
+            flagC = false;
+        }
+
+        flagZ = (newValue == 0);
+        flagN = false;
+        flagH = ((((a.getData() & 0xf) + (nRegValue & 0xf)) & 0x10) == 0x10);
+
+        a.load(newValue);
+    }
+
+    /**
+     * ADD HL,n - Add n to HL.
+     *
+     * n = BC,DE,HL
+     *
+     * Flags affected:
+     *
+     * Z - Not affected
+     *
+     * N - Reset.
+     *
+     * H - Set if carry from bit 11.
+     *
+     * C - Set if carry from bit 15.
+     */
+    private void add_HL_n(Register regOne, Register regTwo) {
+        int newValue, nRegValue, oldValue;
+
+        oldValue = readCombinedRegisters(h, l);
+        nRegValue = readCombinedRegisters(regOne, regTwo);
+        newValue = oldValue + nRegValue;
+
+        flagN = false;
+        flagH = ((((oldValue & 0xfff) + (nRegValue & 0xfff)) & 0x1000) == 0x1000);
+
+        if (newValue > 0xFFFF) {
+            flagC = true;
+            newValue &= 0xFFFF;
+        } else {
+            flagC = false;
+        }
+
+        loadCombinedRegisters(h, l, newValue);
+
+    }
+
+    /**
+     * ADD SP,n - Add n to Stack Pointer (SP).
+     *
+     * n = one byte signed immediate value
+     *
+     * Flags affected:
+     *
+     * Z - Reset.
+     *
+     * N - Reset.
+     *
+     * H - Set or reset according to operation.
+     *
+     * C - Set or reset according to operation.
+     */
+    private void add_SP_n() {
+        int nValue = memoryController.read(pc.getData());
+    }
+
+    private int readCombinedRegisters(Register upper, Register lower) {
+        return (upper.getData() << 8) | lower.getData();
+    }
+
+    private void loadCombinedRegisters(Register h, Register l, int newValue) {
+        h.load(newValue >> 8);
+        l.load(newValue & 0xff);
     }
 
     public void printInfo() {
         System.out.println("-------------------------------");
         System.out.println("CPU INFO");
-        flagController.printInfo();
         System.out.println("");
-        registerController.printInfo();
     }
+
 }
