@@ -24,4 +24,8 @@ public class Register {
     public void load(int value){
         this.data = value;
     }
+
+    void increment() {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
 }

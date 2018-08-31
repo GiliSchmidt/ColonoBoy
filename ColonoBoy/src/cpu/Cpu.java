@@ -60,6 +60,7 @@ public class Cpu {
         execute(operation);
     }
 
+//<editor-fold defaultstate="collapsed" desc="CPU execution cicle">
     private int fetch() {
         int opcode = memoryController.read(this.pc.getData());
         //TODO: increment PC
@@ -157,6 +158,7 @@ public class Cpu {
     private void consumeClock(int cicles) {
 
     }
+//</editor-fold>
 
     /**
      * - Add n + Carry flag to A.
@@ -185,16 +187,14 @@ public class Cpu {
         newValue = a.getData() + nRegValue;
         newValue += flagC ? 1 : 0;
 
-        if (newValue > 0xFF) {
-            flagC = true;
-            newValue &= 0b1111_1111;
-        } else {
-            flagC = false;
+        flagC = checkCarry(newValue, false);
+        if (flagC) {
+            newValue = newValue &= 0xFF;
         }
 
         flagZ = (newValue == 0);
         flagN = false;
-        flagH = ((((a.getData() & 0xf) + (nRegValue & 0xf)) & 0x10) == 0x10);
+        flagH = checkHalfCarry(a.getData(), nRegValue, false);
 
         a.load(newValue);
     }
@@ -225,18 +225,15 @@ public class Cpu {
         }
 
         newValue = a.getData() + nRegValue;
-        newValue += flagC ? 1 : 0;
 
-        if (newValue > 0xFF) {
-            flagC = true;
-            newValue &= 0b1111_1111;
-        } else {
-            flagC = false;
+        flagC = checkCarry(newValue, false);
+        if (flagC) {
+            newValue &= 0xFF;
         }
 
         flagZ = (newValue == 0);
         flagN = false;
-        flagH = ((((a.getData() & 0xf) + (nRegValue & 0xf)) & 0x10) == 0x10);
+        flagH = checkHalfCarry(nRegValue, a.getData(), false);
 
         a.load(newValue);
     }
@@ -264,13 +261,11 @@ public class Cpu {
         newValue = oldValue + nRegValue;
 
         flagN = false;
-        flagH = ((((oldValue & 0xfff) + (nRegValue & 0xfff)) & 0x1000) == 0x1000);
+        flagH = checkHalfCarry(oldValue, nRegValue, true);
 
-        if (newValue > 0xFFFF) {
-            flagC = true;
+        flagC = checkCarry(newValue, true);
+        if (flagC) {
             newValue &= 0xFFFF;
-        } else {
-            flagC = false;
         }
 
         loadCombinedRegisters(h, l, newValue);
@@ -293,7 +288,23 @@ public class Cpu {
      * C - Set or reset according to operation.
      */
     private void add_SP_n() {
-        throw new UnsupportedOperationException("Not implemented yet");
+        int pcValue, newValue;
+
+        pcValue = memoryController.read(pc.getData());
+        pcValue = getSignedInt(pcValue);
+
+        newValue = pcValue + sp.getData();
+
+        flagH = checkHalfCarry(pcValue, sp.getData(), false);
+        flagC = checkCarry(newValue, false);
+        if (flagC) {
+            newValue &= 0xFFFF;
+        }
+
+        flagZ = false;
+        flagN = false;
+        sp.load(newValue);
+
     }
 
     /**
@@ -344,17 +355,314 @@ public class Cpu {
      * C - Not affected.
      */
     private void bit_b_n(Register r, int b) {
-        throw new UnsupportedOperationException("Not implemented yet");
+        int value = r.getData();
+
+        flagZ = ((value >> b) & 1) == 0;
+        flagN = false;
+        flagH = true;
     }
 
+    /**
+     * CALL n - Push address of next instruction onto stack and then jump to
+     * address nn.
+     *
+     * nn = 16 bit address
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void call_nn() {
+        int value = getWordFromPC();
+
+        pushToStack(value);
+        pc.load(value);
+    }
+
+    /**
+     * CALL cc,n - Call address nn if following condition is true:
+     *
+     * nn = 16 bit value
+     *
+     * cc = NZ, Call if Z flag is reset.
+     *
+     * cc = Z, Call if Z flag is set.
+     *
+     * cc = NC, Call if C flag is reset.
+     *
+     * cc = C, Call if C flag is set.
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void call_cc_n(boolean flag) {
+        int value = getWordFromPC();
+        pc.increment();
+
+        if (flag) {
+            //condition met
+            pc.load(value);
+            consumeClock(24);
+
+        } else {
+            //condition not met
+            consumeClock(12);
+        }
+    }
+
+    /**
+     *
+     * CCF - Complement carry flag.
+     *
+     * If C flag is set then reset it.
+     *
+     * If C flag is reset then set it.
+     *
+     * Flags affected:
+     *
+     * Z - Not affected.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Complemented.
+     */
+    private void ccf() {
+        flagN = false;
+        flagH = false;
+        flagC = !flagC;
+    }
+
+    /**
+     * CP n - Compare A with n.
+     *
+     * This is basically an A - n subtraction instruction but the results are
+     * thrown away.
+     *
+     * n = A,B,C,D,E,H,L,(HL),#
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero. (Set if A = n)
+     *
+     * N - Set.
+     *
+     * H - Set if no borrow from bit 4.
+     *
+     * C - Set for no borrow. (Set if A < n.)
+     *
+     */
+    private void cp_n(int nValue) {
+        int value = a.getData() - nValue;
+
+        flagZ = value == 0;
+        flagN = true;
+        flagH = checkHalfBorrow(a.getData(), nValue, false);
+        flagC = checkBorrow(a.getData(), nValue);
+    }
+
+    /**
+     * CPL - Complement A register. (Flip all bits.)
+     *
+     * Flags affected:
+     *
+     * Z - Not affected.
+     *
+     * N - Set.
+     *
+     * H - Set.
+     *
+     * C - Not affected.
+     */
+    private void cpl() {
+        a.load(~a.getData());
+
+        flagN = true;
+        flagH = true;
+    }
+
+    /**
+     * see: https://ehaskins.com/2018-01-30%20Z80%20DAA/
+     *
+     * DAA - Decimal adjust register A.
+     *
+     * This instruction adjusts register A so that the correct representation of
+     * Binary Coded Decimal (BCD) is obtained.
+     *
+     * Flags affected:
+     *
+     * Z - Set if register A is zero.
+     *
+     * N - Not affected.
+     *
+     * H - Reset.
+     *
+     * C - Set of reset according to operation.
+     *
+     */
+    private void daa() {
+        throw new UnsupportedOperationException("WTF is this OP!");
+    }
+
+    /**
+     * DEC n - Decrement register n.
+     *
+     * n = A,B,C,D,E,H,L,(HL)
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Set.
+     *
+     * H - Set if no borrow from bit 4.
+     *
+     * C - Not affected.
+     */
+    private void dec_n(Register reg) {
+    }
+
+//<editor-fold defaultstate="collapsed" desc="Util methods">
+    /**
+     * Read the bits from 2 registers and return them combined.
+     *
+     * Ex: IF: upper = 1111 and lower = 000 THEN return 1111_0000
+     *
+     * @param upper Upper register
+     * @param lower Lower register
+     *
+     * @return The two registers combined
+     */
     private int readCombinedRegisters(Register upper, Register lower) {
         return (upper.getData() << 8) | lower.getData();
     }
 
-    private void loadCombinedRegisters(Register h, Register l, int newValue) {
-        h.load(newValue >> 8);
-        l.load(newValue & 0xff);
+    /**
+     * Load the informed value into the informed registers.
+     *
+     * Ex: IF newValue = 1111_0000 THEN upper.value = 1111 and lower.value =
+     * 0000
+     *
+     * @param upper Upper register
+     * @param lower Lower register
+     * @param newValue Value to be loaded
+     */
+    private void loadCombinedRegisters(Register upper, Register lower, int newValue) {
+        upper.load(newValue >> 8);
+        lower.load(newValue & 0xff);
     }
+
+    /**
+     * Check if there's half carry from n-bit to y-bit when adding two values.
+     *
+     * @param value Value to be checked
+     * @param bits16 If true then is a 16 bit sum (check carry from bit 7 to 8).
+     * Else, it's a 8 bit sum (check carry from bit 3 to 4).
+     *
+     * @return true if carry occurs, otherwise false
+     */
+    private boolean checkHalfCarry(int valueA, int valueB, boolean bits16) {
+        if (bits16) {
+            return ((((valueA & 0xfff) + (valueB & 0xfff)) & 0x1000) == 0x1000);
+        } else {
+            return ((((valueA & 0xf) + (valueB & 0xf)) & 0x10) == 0x10);
+        }
+    }
+
+    /**
+     * Check if there's carry from n-bit to y-bit when adding two values.
+     *
+     * @param valueA Value to be added
+     * @param valueB Value to be added
+     * @param bits16 If true then is a 16 bit sum (check carry from bit 15 to
+     * 16). Else, it's a 8 bit sum (check carry from bit 7 to 8).
+     *
+     * @return true if carry occurs, otherwise false
+     */
+    private boolean checkCarry(int value, boolean bits16) {
+        if (bits16) {
+            return value > 0xFFFF;
+        } else {
+            return value > 0xFFFF;
+        }
+    }
+
+    /**
+     * Check if there's half borrow from n-bit to y-bit when subtracting two
+     * values.
+     *
+     * @param value Value to be checked
+     * @param bits16 If true then is a 16 bit subtract (check borrow from bit 8
+     * to 7). Else, it's a 8 bit subtract (check carry from bit 4 to 3).
+     *
+     * @return true if carry occurs, otherwise false
+     */
+    private boolean checkHalfBorrow(int valueA, int valueB, boolean bits16) {
+        if (bits16) {
+            return ((valueA & 0xFFF) < (valueB & 0xFFF));
+        } else {
+            return ((valueA & 0xF) < (valueB & 0xF));
+        }
+    }
+
+    /**
+     * Check if there's borrow from n-bit to y-bit when subtracting two values.
+     *
+     * @param valueA Value to be subtracted
+     * @param valueB Value to be subtracted
+     *
+     * @return true if borrow occurs, otherwise false
+     */
+    private boolean checkBorrow(int valueA, int valueB) {
+        return valueA < valueB;
+    }
+
+    /**
+     * Transform the informed value to a signed int.
+     *
+     * @param value To be transformed
+     * @return Signed int
+     */
+    private int getSignedInt(int value) {
+        if (value > 127) {
+            return -((~value + 1) & 0xFF);
+        } else {
+            return value;
+        }
+    }
+
+    /**
+     * Read a word from the address in PC. Read the value in the address
+     * apponted in PC then increment PC and read the value again.
+     *
+     * @return Word read from addresses apponted in PC
+     */
+    private int getWordFromPC() {
+        int lowerBits, upperBits;
+
+        lowerBits = memoryController.read(pc.getData());
+        pc.increment();
+        upperBits = memoryController.read(pc.getData());
+
+        return (upperBits << 8) | lowerBits;
+    }
+
+    /**
+     * Push the informed value into the stack pointer.
+     *
+     * @param value Value to be added
+     */
+    private void pushToStack(int value) {
+        //write upper bits
+        memoryController.writeByte(sp.getData(), value >> 8);
+        sp.increment();
+
+        //write lower bits
+        memoryController.writeByte(sp.getData(), value & 0xFF);
+    }
+//</editor-fold>
 
     public void printInfo() {
         System.out.println("-------------------------------");
