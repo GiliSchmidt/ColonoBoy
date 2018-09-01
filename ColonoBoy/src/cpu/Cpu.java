@@ -29,19 +29,21 @@ public class Cpu {
     private boolean flagH;
     private boolean flagC;
 
+    private boolean pendingInterrupt;
+
     public Cpu() {
         this.memoryController = new MemoryController();
 
-        this.a = new Register();
-        this.b = new Register();
-        this.d = new Register();
-        this.h = new Register();
-        this.f = new Register();
-        this.c = new Register();
-        this.e = new Register();
-        this.l = new Register();
-        this.sp = new Register();
-        this.pc = new Register();
+        this.a = new Register(false);
+        this.b = new Register(false);
+        this.d = new Register(false);
+        this.h = new Register(false);
+        this.f = new Register(false);
+        this.c = new Register(false);
+        this.e = new Register(false);
+        this.l = new Register(false);
+        this.sp = new Register(true);
+        this.pc = new Register(true);
 
         init();
     }
@@ -55,19 +57,34 @@ public class Cpu {
 
     public void executeCicle() {
         // fetch(); decode(); execute();
+        if (pendingInterrupt) {
+            //TODO: this
+        }
+
         int opcode = fetch();
         Runnable operation = decode(opcode);
         execute(operation);
+
     }
 
 //<editor-fold defaultstate="collapsed" desc="CPU execution cicle">
     private int fetch() {
-        int opcode = memoryController.read(this.pc.getData());
+        int opcode = memoryController.readByte(this.pc.getData());
         //TODO: increment PC
 
         return opcode;
     }
 
+    /**
+     * WARNING! SEE JUMP AND CALL INSTRUCTIONS!!!!
+     *
+     * NZ and NC = !flag
+     *
+     * Z and C = flag
+     *
+     * @param opcode
+     * @return
+     */
     private Runnable decode(int opcode) {
         switch (opcode) {
             case 0x00:
@@ -175,16 +192,10 @@ public class Cpu {
      *
      * C - Set if carry from bit 7.
      */
-    private void adc_A_n(Register regOne, Register regTwo) {
-        int newValue, nRegValue;
+    private void adc_A_n(int value) {
+        int newValue;
 
-        if (regTwo == null) {
-            nRegValue = regOne.getData();
-        } else {
-            nRegValue = readCombinedRegisters(regOne, regTwo);
-        }
-
-        newValue = a.getData() + nRegValue;
+        newValue = a.getData() + value;
         newValue += flagC ? 1 : 0;
 
         flagC = checkCarry(newValue, false);
@@ -194,7 +205,7 @@ public class Cpu {
 
         flagZ = (newValue == 0);
         flagN = false;
-        flagH = checkHalfCarry(a.getData(), nRegValue, false);
+        flagH = checkHalfCarry(a.getData(), value, false);
 
         a.load(newValue);
     }
@@ -215,16 +226,10 @@ public class Cpu {
      * C - Set if carry from bit 7.
      *
      */
-    private void add_A_n(Register regOne, Register regTwo) {
-        int newValue, nRegValue;
+    private void add_A_n(int value) {
+        int newValue;
 
-        if (regTwo == null) {
-            nRegValue = regOne.getData();
-        } else {
-            nRegValue = readCombinedRegisters(regOne, regTwo);
-        }
-
-        newValue = a.getData() + nRegValue;
+        newValue = a.getData() + value;
 
         flagC = checkCarry(newValue, false);
         if (flagC) {
@@ -233,7 +238,7 @@ public class Cpu {
 
         flagZ = (newValue == 0);
         flagN = false;
-        flagH = checkHalfCarry(nRegValue, a.getData(), false);
+        flagH = checkHalfCarry(value, a.getData(), false);
 
         a.load(newValue);
     }
@@ -253,15 +258,14 @@ public class Cpu {
      *
      * C - Set if carry from bit 15.
      */
-    private void add_HL_n(Register regOne, Register regTwo) {
-        int newValue, nRegValue, oldValue;
+    private void add_HL_n(int value) {
+        int newValue, oldValue;
 
         oldValue = readCombinedRegisters(h, l);
-        nRegValue = readCombinedRegisters(regOne, regTwo);
-        newValue = oldValue + nRegValue;
+        newValue = oldValue + value;
 
         flagN = false;
-        flagH = checkHalfCarry(oldValue, nRegValue, true);
+        flagH = checkHalfCarry(oldValue, value, true);
 
         flagC = checkCarry(newValue, true);
         if (flagC) {
@@ -290,7 +294,7 @@ public class Cpu {
     private void add_SP_n() {
         int pcValue, newValue;
 
-        pcValue = memoryController.read(pc.getData());
+        pcValue = memoryController.readByte(pc.getData());
         pcValue = getSignedInt(pcValue);
 
         newValue = pcValue + sp.getData();
@@ -322,15 +326,7 @@ public class Cpu {
      *
      * C - Reset.
      */
-    private void and_n(Register regOne, Register regTwo) {
-        int value;
-
-        if (regTwo == null) {
-            value = regOne.getData();
-        } else {
-            value = readCombinedRegisters(regOne, regTwo);
-        }
-
+    private void and_n(int value) {
         a.load(a.getData() & value);
 
         flagZ = a.getData() == 0;
@@ -354,9 +350,7 @@ public class Cpu {
      *
      * C - Not affected.
      */
-    private void bit_b_n(Register r, int b) {
-        int value = r.getData();
-
+    private void bit_b_n(int value, int b) {
         flagZ = ((value >> b) & 1) == 0;
         flagN = false;
         flagH = true;
@@ -366,23 +360,23 @@ public class Cpu {
      * CALL n - Push address of next instruction onto stack and then jump to
      * address nn.
      *
-     * nn = 16 bit address
+     * nn = 16 bit address (LS byte first.)
      *
      * Flags affected:
      *
      * None
      */
     private void call_nn() {
-        int value = getWordFromPC();
+        int value = getWordFromPClsFirst();
 
-        pushToStack(value);
+        pushToStack(pc.getData());
         pc.load(value);
     }
 
     /**
      * CALL cc,n - Call address nn if following condition is true:
      *
-     * nn = 16 bit value
+     * nn = 16 bit value (LS first).
      *
      * cc = NZ, Call if Z flag is reset.
      *
@@ -397,11 +391,12 @@ public class Cpu {
      * None
      */
     private void call_cc_n(boolean flag) {
-        int value = getWordFromPC();
+        int value = getWordFromPClsFirst();
         pc.increment();
 
         if (flag) {
             //condition met
+            pushToStack(pc.getData());
             pc.load(value);
             consumeClock(24);
 
@@ -509,7 +504,7 @@ public class Cpu {
     /**
      * DEC n - Decrement register n.
      *
-     * n = A,B,C,D,E,H,L,(HL)
+     * n = A,B,C,D,E,H,L
      *
      * Flags affected:
      *
@@ -522,6 +517,247 @@ public class Cpu {
      * C - Not affected.
      */
     private void dec_n(Register reg) {
+        flagH = checkHalfBorrow(reg.getData(), 0x01, false);
+
+        reg.decrement();
+
+        flagZ = reg.getData() == 0;
+        flagN = true;
+    }
+
+    /**
+     * DEC n - Decrement memory address (HL).
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Set.
+     *
+     * H - Set if no borrow from bit 4.
+     *
+     * C - Not affected.
+     */
+    private void dec_HL_pointer() {
+        int oldValue, newValue, address;
+
+        address = readCombinedRegisters(h, l);
+
+        oldValue = memoryController.readByte(address);
+        newValue = (oldValue - 1) & 0xFF;
+
+        memoryController.writeByte(address, newValue);
+
+        flagZ = newValue == 0;
+        flagN = true;
+        flagH = checkHalfBorrow(oldValue, 0x01, false);
+    }
+
+    /**
+     * DEC nn - Decrement register nn.
+     *
+     * nn = BC,DE,HL
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void dec_nn(Register regOne, Register regTwo) {
+        int value = readCombinedRegisters(regOne, regTwo);
+        value -= 1;
+
+        loadCombinedRegisters(regOne, regTwo, value);
+    }
+
+    /**
+     * DEC nn - Decrement register nn.
+     *
+     * nn = SP
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void dec_SP() {
+        sp.decrement();
+    }
+
+    /**
+     * DI - Disable interrupts.
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void di() {
+        pendingInterrupt = false;
+    }
+
+    /**
+     * EI - Enable interrupts.
+     *
+     * This instruction enables the interrupts but not immediately.
+     *
+     * Interrupts are enabled after the instruction after EI is executed.
+     *
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void ei() {
+        pendingInterrupt = true;
+    }
+
+    /**
+     * INC n - Increment register n.
+     *
+     * n = A,B,C,D,E,H,L
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Set if carry from bit 3.
+     *
+     * C - Not affected.
+     */
+    private void inc_n(Register reg) {
+        reg.increment();
+
+        flagZ = checkCarry(reg.getData(), false);
+        if (flagZ) {
+            reg.setData(reg.getData() & 0xFF);
+        }
+
+        flagN = false;
+        flagH = checkHalfCarry(reg.getData(), 0x01, false);
+    }
+
+    /**
+     * INC n - Increment memory address n.
+     *
+     * n = (HL)
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Set if carry from bit 3.
+     *
+     * C - Not affected.
+     */
+    private void inc_HL_pointer() {
+        int address, newValue, oldValue;
+
+        address = readCombinedRegisters(h, l);
+
+        oldValue = memoryController.readByte(address);
+        newValue = (oldValue + 1);
+
+        memoryController.writeByte(address, newValue & 0xFF);
+
+        flagZ = checkCarry(newValue, false);
+        flagN = false;
+        flagH = checkHalfCarry(oldValue, 0x01, false);
+    }
+
+    /**
+     * INC nn - Increment register nn.
+     *
+     * n = BC,DE,HL,SP
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void inc_nn(Register regOne, Register regTwo) {
+        int value = readCombinedRegisters(regOne, regTwo);
+        loadCombinedRegisters(regOne, regTwo, value + 1);
+    }
+
+    /**
+     * JP n - Jump to address n.
+     *
+     * n = two byte immediate value. (LSByte first)
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void jp_n() {
+        int address = getWordFromPClsFirst();
+        pc.load(address);
+    }
+
+    /**
+     * JP cc,n - Jump to address n if following condition is true:
+     *
+     * nn = two byte immediate value. (LSByte first.)
+     *
+     * cc = NZ, Jump if Z flag is reset.
+     *
+     * cc = Z, Jump if Z flag is set.
+     *
+     * cc = NC, Jump if C flag is reset.
+     *
+     * cc = C, Jump if C flag is set.
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void jp_cc_nn(boolean flag) {
+        int address = getWordFromPClsFirst();
+
+        if (flagC) {
+            pc.load(address);
+            consumeClock(12);
+        } else {
+            consumeClock(16);
+        }
+    }
+
+    /**
+     * JP [HL] - Jump to address contained in HL.
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void jp_HL() {
+        int address = readCombinedRegisters(h, l);
+        pc.load(address);
+    }
+
+    /**
+     * JR n - Add n to current address and jump to it.
+     *
+     * n = one byte signed immediate value.
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void jr_r() {
+        int address, addressValue;
+
+        addressValue = memoryController.readByte(pc.getData());
+        pc.increment();
+
+        address = pc.getData();
+
+        addressValue = getSignedInt(addressValue);
+        address += addressValue;
+
+        pc.load(address);
     }
 
 //<editor-fold defaultstate="collapsed" desc="Util methods">
@@ -550,6 +786,10 @@ public class Cpu {
      * @param newValue Value to be loaded
      */
     private void loadCombinedRegisters(Register upper, Register lower, int newValue) {
+        if (newValue > 0xFFFF || newValue < 0) {
+            newValue &= 0xFFFF;
+        }
+
         upper.load(newValue >> 8);
         lower.load(newValue & 0xff);
     }
@@ -597,7 +837,7 @@ public class Cpu {
      * @param bits16 If true then is a 16 bit subtract (check borrow from bit 8
      * to 7). Else, it's a 8 bit subtract (check carry from bit 4 to 3).
      *
-     * @return true if carry occurs, otherwise false
+     * @return true if carry NOT occurs, otherwise false
      */
     private boolean checkHalfBorrow(int valueA, int valueB, boolean bits16) {
         if (bits16) {
@@ -613,7 +853,7 @@ public class Cpu {
      * @param valueA Value to be subtracted
      * @param valueB Value to be subtracted
      *
-     * @return true if borrow occurs, otherwise false
+     * @return true if borrow NOT occurs, otherwise false
      */
     private boolean checkBorrow(int valueA, int valueB) {
         return valueA < valueB;
@@ -637,14 +877,17 @@ public class Cpu {
      * Read a word from the address in PC. Read the value in the address
      * apponted in PC then increment PC and read the value again.
      *
+     * Least significant byte FIRST!
+     *
      * @return Word read from addresses apponted in PC
      */
-    private int getWordFromPC() {
+    private int getWordFromPClsFirst() {
         int lowerBits, upperBits;
 
-        lowerBits = memoryController.read(pc.getData());
+        lowerBits = memoryController.readByte(pc.getData());
         pc.increment();
-        upperBits = memoryController.read(pc.getData());
+        upperBits = memoryController.readByte(pc.getData());
+        pc.increment();
 
         return (upperBits << 8) | lowerBits;
     }

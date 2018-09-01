@@ -8,6 +8,13 @@ package cpu;
 public class Register {
 
     private int data;
+    private boolean is16Bits;
+
+    public Register(boolean is16Bits) {
+        this.is16Bits = is16Bits;
+    }
+    
+    
 
     public int getData() {
         return data;

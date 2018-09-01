@@ -6,7 +6,7 @@ package cpu;
  */
 public class MemoryController {
 
-    public int read(int pos) {
+    public int readByte(int pos) {
         return 0;
     }
 
