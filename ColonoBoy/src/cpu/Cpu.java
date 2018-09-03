@@ -753,6 +753,7 @@ public class Cpu {
         pc.increment();
 
         address = pc.getData();
+        pc.increment();
 
         addressValue = getSignedInt(addressValue);
         address += addressValue;
