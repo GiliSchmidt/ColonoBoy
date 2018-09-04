@@ -7,6 +7,7 @@ Do you want to make a GameBoy emulator? The folowing links may help... =P
 
 
 **General documentation**
+
 [How to make a (GameBoy) emulator?](https://www.cl.cam.ac.uk/~pv273/slides/emulation.pdf "How to make a (GameBoy) emulator?")
 
 **[GameBoy Manual](http://marc.rawer.de/Gameboy/Docs/GBCPUman.pdf "GameBoy Manual")**
