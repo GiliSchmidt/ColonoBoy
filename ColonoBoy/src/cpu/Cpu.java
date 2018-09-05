@@ -351,8 +351,8 @@ public class Cpu {
      *
      * C - Not affected.
      */
-    private void bit_b_n(int value, int b) {
-        flagZ = ((value >> b) & 1) == 0;
+    private void bit_b_n(int value, int bytePos) {
+        flagZ = ((value >> bytePos) & 1) == 0;
         flagN = false;
         flagH = true;
     }
@@ -370,7 +370,7 @@ public class Cpu {
     private void call_nn() {
         int value = getWordFromPClsFirst();
 
-        pushToStack(pc.getData());
+        pushSP(pc.getData());
         pc.load(value);
     }
 
@@ -396,7 +396,7 @@ public class Cpu {
 
         if (flag) {
             //condition met
-            pushToStack(pc.getData());
+            pushSP(pc.getData());
 
             pc.increment();
             pc.load(value);
@@ -1156,6 +1156,79 @@ public class Cpu {
 
     }
 
+    /**
+     * OR n - Logical OR n with register A, result in A.
+     *
+     * n = A,B,C,D,E,H,L,(HL),#
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Reset.
+     *
+     */
+    private void or_n(int value) {
+        int result = a.getData() | value;
+
+        flagZ = result == 0;
+        flagN = false;
+        flagH = false;
+        flagC = false;
+
+        a.load(value);
+    }
+
+    /**
+     * POP nn - Pop two bytes off stack into register pair nn.
+     *
+     * Increment Stack Pointer (SP) twice.
+     *
+     * nn = AF,BC,DE,HL
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void pop_nn(Register upper, Register lower) {
+        loadCombinedRegisters(upper, lower, popSP());
+    }
+
+    /**
+     * PUSH nn - Push register pair nn onto stack.
+     *
+     * Decrement Stack Pointer (SP) twice.
+     *
+     *
+     * nn = AF,BC,DE,HL
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void push_nn(Register upper, Register lower) {
+        pushSP(readCombinedRegisters(upper, lower));
+    }
+
+    /**
+     * RES b,r - Reset bit b in register r.
+     *
+     * b = 0-7, r = A,B,C,D,E,H,L,(HL)
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void res_b_r(Register reg, int bytePos) {
+    }
+
 //<editor-fold defaultstate="collapsed" desc="Util methods">
     /**
      * Read the bits from 2 registers and return them combined.
@@ -1293,13 +1366,33 @@ public class Cpu {
      *
      * @param value Value to be added
      */
-    private void pushToStack(int value) {
+    private void pushSP(int value) {
         //write upper bits
         memoryController.writeByte(sp.getData(), value >> 8);
-        sp.increment();
+        sp.decrement();
 
         //write lower bits
         memoryController.writeByte(sp.getData(), value & 0xFF);
+        sp.decrement();
+    }
+
+    /**
+     * Pop a word (2x addresses combined to a 16 bit word) and increment SP by
+     * 2. (LS first)
+     *
+     * return Value popped
+     */
+    private int popSP() {
+        int lower, upper;
+
+        lower = memoryController.readByte(sp.getData());
+        sp.increment();
+
+        upper = memoryController.readByte(sp.getData());
+        sp.increment();
+
+        return (upper << 8) | lower;
+
     }
 //</editor-fold>
 
