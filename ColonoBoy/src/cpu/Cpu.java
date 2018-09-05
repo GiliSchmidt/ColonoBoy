@@ -30,6 +30,7 @@ public class Cpu {
     private boolean flagC;
 
     private boolean pendingInterrupt;
+    private boolean isHalted;
 
     public Cpu() {
         this.memoryController = new MemoryController();
@@ -392,11 +393,12 @@ public class Cpu {
      */
     private void call_cc_n(boolean flag) {
         int value = getWordFromPClsFirst();
-        pc.increment();
 
         if (flag) {
             //condition met
             pushToStack(pc.getData());
+
+            pc.increment();
             pc.load(value);
             consumeClock(24);
 
@@ -716,7 +718,7 @@ public class Cpu {
     private void jp_cc_nn(boolean flag) {
         int address = getWordFromPClsFirst();
 
-        if (flagC) {
+        if (flag) {
             pc.load(address);
             consumeClock(12);
         } else {
@@ -759,6 +761,399 @@ public class Cpu {
         address += addressValue;
 
         pc.load(address);
+    }
+
+    /**
+     * JR cc,n - If following condition is true then add n to current address
+     * and jump to it:
+     *
+     * n = one byte signed immediate value
+     *
+     * cc = NZ, Jump if Z flag is reset.
+     *
+     * cc = Z, Jump if Z flag is set.
+     *
+     * cc = NC, Jump if C flag is reset.
+     *
+     * cc = C, Jump if C flag is set.
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void jr_cc_n(boolean flag) {
+        if (flag) {
+            jr_r();
+            consumeClock(12);
+        } else {
+            pc.increment();
+            consumeClock(0);
+        }
+    }
+
+    /**
+     * HALT - Power down CPU until an interrupt occurs.
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void halt() {
+        isHalted = true;
+    }
+
+    /**
+     * LD A,n - Put value n into A.
+     *
+     * n = A,B,C,D,E,H,L,(BC),(DE),(HL),(nnnn),#
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     * @param value
+     */
+    private void ld_A_n(int value) {
+        a.load(value);
+    }
+
+    /**
+     * LD n,A - Put value A into n.
+     *
+     * n = A,B,C,D,E,H,L,(BC,(DE),(HL),(nnnn)
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void ld_n_A(Register regOne, Register regTwo, boolean toNextAddressInPc) {
+        if (regTwo == null) {
+            regOne.load(a.getData());
+            consumeClock(4);
+        } else {
+            int address;
+
+            if (toNextAddressInPc) {
+                address = getWordFromPClsFirst();
+                consumeClock(16);
+            } else {
+                address = readCombinedRegisters(regOne, regTwo);
+                consumeClock(8);
+            }
+
+            memoryController.writeByte(address, a.getData());
+        }
+    }
+
+    /**
+     * LD A,[C] - Put value at address $FF00 + register C into A.
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void ld_A_C() {
+        int value = memoryController.readByte(c.getData() + 0xFF00);
+        a.load(value);
+    }
+
+    /**
+     * LD A,[HL+] - Same as LD A,[HLI].
+     */
+    private void ld_A_HLplus() {
+        ld_A_HLi();
+    }
+
+    /**
+     * LD A,[HL-] - Same as LD A,[HLD].
+     */
+    private void ld_A_HLminus() {
+        ld_A_HLd();
+    }
+
+    /**
+     * LD A,[HLI] - Put value at address HL into A. Increment HL.
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void ld_A_HLi() {
+        int oldValue = readCombinedRegisters(h, l);
+
+        a.load(memoryController.readByte(oldValue));
+        loadCombinedRegisters(h, l, oldValue + 1);
+    }
+
+    /**
+     * LD A,[HLD] - Put value at address HL into A. Decrement HL.
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void ld_A_HLd() {
+        int oldValue = readCombinedRegisters(h, l);
+
+        a.load(memoryController.readByte(oldValue));
+        loadCombinedRegisters(h, l, oldValue - 1);
+    }
+
+    /**
+     * LD [C],A - Put A into address $FF00 + register C.
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void ld_C_A() {
+        memoryController.writeByte(c.getData() + 0xFF00, a.getData());
+    }
+
+    /**
+     * LD [HL+],A - Same as LD [HLI],A.
+     */
+    private void ld_HLplus_A() {
+        ld_A_HLi();
+    }
+
+    /**
+     * LD [HL-],A - Same as LD [HLD],A.
+     */
+    private void ld_HLminus_A() {
+        ld_HLd_A();
+    }
+
+    /**
+     * LD [HLI],A - Put A into memory address HL. Increment HL.
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void ld_HLi_A() {
+        int address = readCombinedRegisters(h, l);
+
+        memoryController.writeByte(address, a.getData());
+        loadCombinedRegisters(h, l, address + 1);
+    }
+
+    /**
+     * LD [HLD],A - Put A into memory address HL. Decrement HL.
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void ld_HLd_A() {
+        int address = readCombinedRegisters(h, l);
+
+        memoryController.writeByte(address, a.getData());
+        loadCombinedRegisters(h, l, address - 1);
+    }
+
+    /**
+     * TO READ/STORE FROM (HL) USE THE OTHER METHOD
+     *
+     * LD r1,r2 - Put value r2 into r1.
+     *
+     * r1,r2 = A,B,C,D,E,H,L
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void ld_r1_r2(Register r1, Register r2) {
+        r1.load(r2.getData());
+    }
+
+    /**
+     * TO READ/STORE NOT FROM (HL) USE THE OTHER METHOD
+     *
+     * LD r1,r2 - Put value r2 into r1.
+     *
+     * r1,r2 = A,B,C,D,E,H,L,(HL)
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void ld_r1_r2_HL_pointer(Register reg, boolean fromHL) {
+        int address = readCombinedRegisters(h, l);
+        if (fromHL) {
+            reg.load(memoryController.readByte(address));
+        } else {
+            memoryController.writeByte(address, reg.getData());
+        }
+    }
+
+    /**
+     * LD n,nn - Put value nn into n.
+     *
+     * n = BC,DE,HL,SP
+     *
+     * nn = 16 bit immediate value
+     *
+     *
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void ld_n_nn(Register regOne, Register regTwo) {
+        int value = getWordFromPClsFirst();
+
+        if (regTwo == null) {
+            regOne.load(value);
+        } else {
+            loadCombinedRegisters(regOne, regTwo, value);
+        }
+    }
+
+    /**
+     * LD HL,[SP+n] - Put SP + n into HL.
+     *
+     * n = one byte signed immediate value
+     *
+     * Flags affected:
+     *
+     * Z - Reset.
+     *
+     * N - Reset.
+     *
+     * H - Set or reset according to operation.
+     *
+     * C - Set or reset according to operation.
+     *
+     */
+    private void ld_HL_SPplusN() {
+        int n, value;
+
+        n = getSignedInt(memoryController.readByte(pc.getData()));
+        pc.increment();
+
+        value = sp.getData() + n;
+
+        flagZ = false;
+        flagN = false;
+
+        flagH = checkHalfCarry(n, sp.getData(), true);
+        flagC = checkCarry(value, true);
+
+        loadCombinedRegisters(h, l, value);
+
+    }
+
+    /**
+     * LD SP,HL - Put HL into Stack Pointer (SP).
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void ld_SP_HL() {
+        sp.load(readCombinedRegisters(h, l));
+    }
+
+    /**
+     * LD [n],SP - Put Stack Pointer (SP) at address n.
+     *
+     * n = two byte immediate address
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void ld_n_SP() {
+        int address = getWordFromPClsFirst();
+
+        memoryController.writeByte(address, (address & 0xFF));
+        memoryController.writeByte(address + 1, address >> 8);
+    }
+
+    /**
+     * LDD A,[HL] - Same as LD A,[HLD].
+     */
+    private void ldd_A_HL() {
+        ld_A_HLd();
+    }
+
+    /**
+     * LDD [HL],A - Same as LD [HLD],A.
+     */
+    private void ldd_HL_A() {
+        ld_HLd_A();
+    }
+
+    /**
+     * LDH [n],A - Put A into memory address $FF00 + n.
+     *
+     * n = one byte immediate value
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void ldh_n_A() {
+        int address = memoryController.readByte(pc.getData()) + 0xFF00;
+        pc.increment();
+
+        memoryController.writeByte(address, a.getData());
+    }
+
+    /**
+     * LDH A,[n] - Put memory address $FF00 + n into A.
+     *
+     * n = one byte immediate value
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void ldh_A_n() {
+        int address = memoryController.readByte(pc.getData());
+        pc.increment();
+
+        a.load(memoryController.readByte(address + 0xFF00));
+    }
+
+    /**
+     * LDHL SP,n - Same as LD HL,[SP+n]
+     */
+    private void ldhl_SP_n() {
+        ld_HL_SPplusN();
+    }
+
+    /**
+     * LDI A,[HL] - Same as LD A,[HLI].
+     */
+    private void ldi_A_HL() {
+        ld_A_HLi();
+    }
+
+    /**
+     * LDI [HL],A - Same as LD [HLI],A.
+     *
+     */
+    private void ldi_HL_A() {
+        ld_HLi_A();
+    }
+
+    /**
+     * NOP - No operation.
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void nop() {
+
     }
 
 //<editor-fold defaultstate="collapsed" desc="Util methods">
