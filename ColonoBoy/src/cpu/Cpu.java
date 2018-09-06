@@ -1,7 +1,5 @@
 package cpu;
 
-import cpu.registers.RegisterController;
-
 /**
  *
  * @author Giliardi Schmidt
@@ -592,7 +590,7 @@ public class Cpu {
      * None
      */
     private void di() {
-        pendingInterrupt = false;
+        InterruptController.getInstance().disableInterrupt();
     }
 
     /**
@@ -1219,7 +1217,7 @@ public class Cpu {
     /**
      * RES b,r - Reset bit b in register r.
      *
-     * b = 0-7, r = A,B,C,D,E,H,L,(HL)
+     * b = 0-7, r = A,B,C,D,E,H,L
      *
      * Flags affected:
      *
@@ -1227,7 +1225,278 @@ public class Cpu {
      *
      */
     private void res_b_r(Register reg, int bytePos) {
+        int mask, regValue;
+
+        mask = ~(1 << bytePos);
+        regValue = reg.getData();
+
+        reg.load(mask & regValue);
     }
+
+    /**
+     * RES b,r - Reset bit b in register r.
+     *
+     * b = 0-7, r = (HL)
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void res_b_r_HL_pointer(int bytePos) {
+        int mask, regValue;
+
+        mask = ~(1 << bytePos);
+        regValue = readCombinedRegisters(h, l);
+
+        loadCombinedRegisters(h, l, regValue & mask);
+    }
+
+    /**
+     * RET - Pop two bytes from stack & jump to that address.
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void ret() {
+        pc.load(popSP());
+    }
+
+    /**
+     * RET cc - Return if following condition is true:
+     *
+     * cc = NZ, Return if Z flag is reset.
+     *
+     * cc = Z, Return if Z flag is set.
+     *
+     * cc = NC, Return if C flag is reset.
+     *
+     * cc = C, Return if C flag is set.
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     * @param flag
+     */
+    private void ret_cc(boolean flag) {
+        if (flag) {
+            ret();
+            consumeClock(20);
+        } else {
+            consumeClock(8);
+        }
+    }
+
+    /**
+     * RETI - Pop two bytes from stack & jump to that address then enable
+     * interrupts.
+     *
+     * Flags affected:
+     *
+     * None
+     *
+     */
+    private void reti() {
+        pc.load(popSP());
+
+        InterruptController.getInstance().enableInterrupt();
+    }
+
+    /**
+     * RL n - Rotate n left through Carry flag.
+     *
+     * n = A,B,C,D,E,H,L
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 7 data.
+     *
+     */
+    private void rl_n(Register reg) {
+        int flagCValue, oldRegValue, newRegValue;
+
+        flagCValue = flagC ? 1 : 0;
+        oldRegValue = reg.getData();
+        newRegValue = ((oldRegValue << 1) | flagCValue) & 0xFF;
+
+        flagC = (oldRegValue >> 7) == 1;
+
+        reg.load(newRegValue);
+
+        flagZ = newRegValue == 0;
+        flagN = false;
+        flagH = false;
+    }
+
+    /**
+     * RL n - Rotate n left through Carry flag.
+     *
+     * n = (HL)
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 7 data.
+     *
+     */
+    private void rl_n_HL_pointer() {
+        int flagCValue, oldRegValue, newValue, address;
+
+        flagCValue = flagC ? 1 : 0;
+        address = readCombinedRegisters(h, l);
+        oldRegValue = memoryController.readByte(address);
+
+        newValue = ((oldRegValue << 1) | flagCValue) & 0xFF;
+
+        flagC = (oldRegValue >> 7) == 1;
+
+        memoryController.writeByte(address, newValue);
+
+        flagZ = newValue == 0;
+        flagN = false;
+        flagH = false;
+    }
+
+    /**
+     * RLC n - Rotate n left. Old bit 7 to Carry flag.
+     *
+     * n = A,B,C,D,E,H,L
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 7 data.
+     */
+    private void rlc_n(Register reg) {
+        int bit7Value, oldRegValue, newRegValue;
+
+        oldRegValue = reg.getData();
+        bit7Value = (oldRegValue >> 7);
+        newRegValue = ((oldRegValue << 1) | bit7Value) & 0xFF;
+
+        reg.load(newRegValue);
+
+        flagZ = newRegValue == 0;
+        flagN = false;
+        flagH = false;
+        flagC = bit7Value == 1;
+    }
+
+    /**
+     * RLC n - Rotate n left. Old bit 7 to Carry flag.
+     *
+     * n = A,B,C,D,E,H,L,(HL)
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 7 data.
+     */
+    private void rlc_n_HL_pointer() {
+        int bit7Value, oldRegValue, newValue, address;
+
+        address = readCombinedRegisters(h, l);
+        oldRegValue = memoryController.readByte(address);
+
+        bit7Value = (oldRegValue >> 7);
+
+        newValue = ((oldRegValue << 1) | bit7Value) & 0xFF;
+
+        memoryController.writeByte(address, newValue);
+
+        flagZ = newValue == 0;
+        flagN = false;
+        flagH = false;
+        flagC = bit7Value == 1;
+    }
+
+    /**
+     * RR n - Rotate n right through Carry flag.
+     *
+     * n = A,B,C,D,E,H,L
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 0 data.
+     */
+    private void rr_n(Register reg) {
+        int flagCValue, oldRegValue, newRegValue;
+
+        flagCValue = flagC ? 1 : 0;
+        oldRegValue = reg.getData();
+        newRegValue = ((flagCValue << 7) | (oldRegValue >> 1)) & 0xFF;
+
+        flagC = (oldRegValue & 0x01) == 1;
+
+        reg.load(newRegValue);
+
+        flagZ = newRegValue == 0;
+        flagN = false;
+        flagH = false;
+    }
+
+    /**
+     * RR n - Rotate n right through Carry flag.
+     *
+     * n = (HL)
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 0 data.
+     */
+    private void rr_n_HL_pointer() {
+        int flagCValue, oldRegValue, newRegValue, address;
+
+        address = readCombinedRegisters(h, l);
+        oldRegValue = memoryController.readByte(address);
+
+        flagCValue = flagC ? 1 : 0;
+        newRegValue = ((flagCValue << 7) | (oldRegValue >> 1)) & 0xFF;
+
+        memoryController.writeByte(address, newRegValue);
+
+        flagZ = newRegValue == 0;
+        flagN = false;
+        flagH = false;
+        flagC = (oldRegValue & 0x01) == 1;
+    }
+    
+    
 
 //<editor-fold defaultstate="collapsed" desc="Util methods">
     /**

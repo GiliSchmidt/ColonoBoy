@@ -23,4 +23,8 @@ public class InterruptController {
 
         return instance;
     }
+
+    void disableInterrupt() {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
 }
