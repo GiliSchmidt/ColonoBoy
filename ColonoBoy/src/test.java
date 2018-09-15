@@ -76,6 +76,21 @@ public class test {
         newRegValue = ((flagCValue << 7) | (oldRegValue >> 1)) & 0xFF;
         System.out.println(Integer.toBinaryString(newRegValue));
 
+        System.out.println("--------------------");
+
+        System.out.println(Integer.toBinaryString(value >> 7));
+
+        value = 0b0111_1111;
+        int result = (value >> 1) | (value & 0b10000000);
+
+        System.out.println(Integer.toBinaryString(result));
+        
+        int p = 0b1010;
+        int o = 0b1111;
+        
+        System.out.println("------");
+        System.out.println(Integer.toBinaryString(p^o));
+
     }
 
     public static int readCombinedRegisters(int upper, int lower) {

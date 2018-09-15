@@ -5,9 +5,9 @@ package cpu;
  * @author Giliardi Schmidt
  */
 public class Cpu {
-
+    
     private final MemoryController memoryController;
-
+    
     private final Register a;
     private final Register b;
     private final Register d;
@@ -21,18 +21,18 @@ public class Cpu {
     private final Register sp;
     //program counter - next instruction
     private final Register pc;
-
+    
     private boolean flagZ;
     private boolean flagN;
     private boolean flagH;
     private boolean flagC;
-
+    
     private boolean pendingInterrupt;
     private boolean isHalted;
-
+    
     public Cpu() {
         this.memoryController = new MemoryController();
-
+        
         this.a = new Register(false);
         this.b = new Register(false);
         this.d = new Register(false);
@@ -43,27 +43,27 @@ public class Cpu {
         this.l = new Register(false);
         this.sp = new Register(true);
         this.pc = new Register(true);
-
+        
         init();
     }
-
+    
     private void init() {
         //at startup the PC is set to 0x100
         this.pc.setData(0x100);
         //at startup the PC is set to 0xFFFE
         this.sp.setData(0xFFFE);
     }
-
+    
     public void executeCicle() {
         // fetch(); decode(); execute();
         if (pendingInterrupt) {
             //TODO: this
         }
-
+        
         int opcode = fetch();
         Runnable operation = decode(opcode);
         execute(operation);
-
+        
     }
 
 //<editor-fold defaultstate="collapsed" desc="CPU execution cicle">
@@ -120,59 +120,59 @@ public class Cpu {
                 return () -> rrcAInst();
             case 0x10:
                 return () -> stopInst();
-
+            
             case 0x20:
                 return () -> jrNZr8Inst();
-
+            
             case 0x30:
                 return () -> jrNCr8Inst();
-
+            
             case 0x40:
                 return () -> ldBBInst();
-
+            
             case 0x50:
                 return () -> ldDBInst();
-
+            
             case 0x60:
                 return () -> ldHBInst();
-
+            
             case 0x70:
                 return () -> ldHLBInst();
-
+            
             case 0x80:
                 return () -> addABInst();
-
+            
             case 0x90:
                 return () -> subBInst();
-
+            
             case 0xA0:
                 return () -> andBInst();
-
+            
             case 0xB0:
                 return () -> orBInst();
-
+            
             case 0xC0:
                 return () -> retNZInst();
-
+            
             case 0xD0:
                 return () -> retNCInst();
-
+            
             case 0xE0:
                 return () -> ldha8AInst();
-
+            
             case 0xF0:
                 return () -> ldaAa8Inst();
-
+            
         }
         throw new RuntimeException("Opcode " + opcode + " is not implemented yet or it's invalid.");
     }
-
+    
     private void execute(Runnable operation) {
         operation.run();
     }
-
+    
     private void consumeClock(int cicles) {
-
+        
     }
 //</editor-fold>
 
@@ -193,19 +193,19 @@ public class Cpu {
      */
     private void adc_A_n(int value) {
         int newValue;
-
+        
         newValue = a.getData() + value;
         newValue += flagC ? 1 : 0;
-
+        
         flagC = checkCarry(newValue, false);
         if (flagC) {
             newValue = newValue &= 0xFF;
         }
-
+        
         flagZ = (newValue == 0);
         flagN = false;
         flagH = checkHalfCarry(a.getData(), value, false);
-
+        
         a.load(newValue);
     }
 
@@ -227,18 +227,18 @@ public class Cpu {
      */
     private void add_A_n(int value) {
         int newValue;
-
+        
         newValue = a.getData() + value;
-
+        
         flagC = checkCarry(newValue, false);
         if (flagC) {
             newValue &= 0xFF;
         }
-
+        
         flagZ = (newValue == 0);
         flagN = false;
         flagH = checkHalfCarry(value, a.getData(), false);
-
+        
         a.load(newValue);
     }
 
@@ -259,20 +259,20 @@ public class Cpu {
      */
     private void add_HL_n(int value) {
         int newValue, oldValue;
-
+        
         oldValue = readCombinedRegisters(h, l);
         newValue = oldValue + value;
-
+        
         flagN = false;
         flagH = checkHalfCarry(oldValue, value, true);
-
+        
         flagC = checkCarry(newValue, true);
         if (flagC) {
             newValue &= 0xFFFF;
         }
-
+        
         loadCombinedRegisters(h, l, newValue);
-
+        
     }
 
     /**
@@ -292,22 +292,22 @@ public class Cpu {
      */
     private void add_SP_n() {
         int pcValue, newValue;
-
+        
         pcValue = memoryController.readByte(pc.getData());
         pcValue = getSignedInt(pcValue);
-
+        
         newValue = pcValue + sp.getData();
-
+        
         flagH = checkHalfCarry(pcValue, sp.getData(), false);
         flagC = checkCarry(newValue, false);
         if (flagC) {
             newValue &= 0xFFFF;
         }
-
+        
         flagZ = false;
         flagN = false;
         sp.load(newValue);
-
+        
     }
 
     /**
@@ -327,7 +327,7 @@ public class Cpu {
      */
     private void and_n(int value) {
         a.load(a.getData() & value);
-
+        
         flagZ = a.getData() == 0;
         flagH = true;
         flagN = false;
@@ -367,7 +367,7 @@ public class Cpu {
      */
     private void call_nn() {
         int value = getWordFromPClsFirst();
-
+        
         pushSP(pc.getData());
         pc.load(value);
     }
@@ -391,15 +391,15 @@ public class Cpu {
      */
     private void call_cc_n(boolean flag) {
         int value = getWordFromPClsFirst();
-
+        
         if (flag) {
             //condition met
             pushSP(pc.getData());
-
+            
             pc.increment();
             pc.load(value);
             consumeClock(24);
-
+            
         } else {
             //condition not met
             consumeClock(12);
@@ -451,7 +451,7 @@ public class Cpu {
      */
     private void cp_n(int nValue) {
         int value = a.getData() - nValue;
-
+        
         flagZ = value == 0;
         flagN = true;
         flagH = checkHalfBorrow(a.getData(), nValue, false);
@@ -473,7 +473,7 @@ public class Cpu {
      */
     private void cpl() {
         a.load(~a.getData());
-
+        
         flagN = true;
         flagH = true;
     }
@@ -518,9 +518,9 @@ public class Cpu {
      */
     private void dec_n(Register reg) {
         flagH = checkHalfBorrow(reg.getData(), 0x01, false);
-
+        
         reg.decrement();
-
+        
         flagZ = reg.getData() == 0;
         flagN = true;
     }
@@ -540,14 +540,14 @@ public class Cpu {
      */
     private void dec_HL_pointer() {
         int oldValue, newValue, address;
-
+        
         address = readCombinedRegisters(h, l);
-
+        
         oldValue = memoryController.readByte(address);
         newValue = (oldValue - 1) & 0xFF;
-
+        
         memoryController.writeByte(address, newValue);
-
+        
         flagZ = newValue == 0;
         flagN = true;
         flagH = checkHalfBorrow(oldValue, 0x01, false);
@@ -565,7 +565,7 @@ public class Cpu {
     private void dec_nn(Register regOne, Register regTwo) {
         int value = readCombinedRegisters(regOne, regTwo);
         value -= 1;
-
+        
         loadCombinedRegisters(regOne, regTwo, value);
     }
 
@@ -626,12 +626,12 @@ public class Cpu {
      */
     private void inc_n(Register reg) {
         reg.increment();
-
+        
         flagZ = checkCarry(reg.getData(), false);
         if (flagZ) {
             reg.setData(reg.getData() & 0xFF);
         }
-
+        
         flagN = false;
         flagH = checkHalfCarry(reg.getData(), 0x01, false);
     }
@@ -653,14 +653,14 @@ public class Cpu {
      */
     private void inc_HL_pointer() {
         int address, newValue, oldValue;
-
+        
         address = readCombinedRegisters(h, l);
-
+        
         oldValue = memoryController.readByte(address);
         newValue = (oldValue + 1);
-
+        
         memoryController.writeByte(address, newValue & 0xFF);
-
+        
         flagZ = checkCarry(newValue, false);
         flagN = false;
         flagH = checkHalfCarry(oldValue, 0x01, false);
@@ -715,7 +715,7 @@ public class Cpu {
      */
     private void jp_cc_nn(boolean flag) {
         int address = getWordFromPClsFirst();
-
+        
         if (flag) {
             pc.load(address);
             consumeClock(12);
@@ -748,16 +748,16 @@ public class Cpu {
      */
     private void jr_r() {
         int address, addressValue;
-
+        
         addressValue = memoryController.readByte(pc.getData());
         pc.increment();
-
+        
         address = pc.getData();
         pc.increment();
-
+        
         addressValue = getSignedInt(addressValue);
         address += addressValue;
-
+        
         pc.load(address);
     }
 
@@ -832,7 +832,7 @@ public class Cpu {
             consumeClock(4);
         } else {
             int address;
-
+            
             if (toNextAddressInPc) {
                 address = getWordFromPClsFirst();
                 consumeClock(16);
@@ -840,7 +840,7 @@ public class Cpu {
                 address = readCombinedRegisters(regOne, regTwo);
                 consumeClock(8);
             }
-
+            
             memoryController.writeByte(address, a.getData());
         }
     }
@@ -880,7 +880,7 @@ public class Cpu {
      */
     private void ld_A_HLi() {
         int oldValue = readCombinedRegisters(h, l);
-
+        
         a.load(memoryController.readByte(oldValue));
         loadCombinedRegisters(h, l, oldValue + 1);
     }
@@ -894,7 +894,7 @@ public class Cpu {
      */
     private void ld_A_HLd() {
         int oldValue = readCombinedRegisters(h, l);
-
+        
         a.load(memoryController.readByte(oldValue));
         loadCombinedRegisters(h, l, oldValue - 1);
     }
@@ -934,7 +934,7 @@ public class Cpu {
      */
     private void ld_HLi_A() {
         int address = readCombinedRegisters(h, l);
-
+        
         memoryController.writeByte(address, a.getData());
         loadCombinedRegisters(h, l, address + 1);
     }
@@ -949,7 +949,7 @@ public class Cpu {
      */
     private void ld_HLd_A() {
         int address = readCombinedRegisters(h, l);
-
+        
         memoryController.writeByte(address, a.getData());
         loadCombinedRegisters(h, l, address - 1);
     }
@@ -1006,7 +1006,7 @@ public class Cpu {
      */
     private void ld_n_nn(Register regOne, Register regTwo) {
         int value = getWordFromPClsFirst();
-
+        
         if (regTwo == null) {
             regOne.load(value);
         } else {
@@ -1032,20 +1032,20 @@ public class Cpu {
      */
     private void ld_HL_SPplusN() {
         int n, value;
-
+        
         n = getSignedInt(memoryController.readByte(pc.getData()));
         pc.increment();
-
+        
         value = sp.getData() + n;
-
+        
         flagZ = false;
         flagN = false;
-
+        
         flagH = checkHalfCarry(n, sp.getData(), true);
         flagC = checkCarry(value, true);
-
+        
         loadCombinedRegisters(h, l, value);
-
+        
     }
 
     /**
@@ -1070,7 +1070,7 @@ public class Cpu {
      */
     private void ld_n_SP() {
         int address = getWordFromPClsFirst();
-
+        
         memoryController.writeByte(address, (address & 0xFF));
         memoryController.writeByte(address + 1, address >> 8);
     }
@@ -1101,7 +1101,7 @@ public class Cpu {
     private void ldh_n_A() {
         int address = memoryController.readByte(pc.getData()) + 0xFF00;
         pc.increment();
-
+        
         memoryController.writeByte(address, a.getData());
     }
 
@@ -1117,7 +1117,7 @@ public class Cpu {
     private void ldh_A_n() {
         int address = memoryController.readByte(pc.getData());
         pc.increment();
-
+        
         a.load(memoryController.readByte(address + 0xFF00));
     }
 
@@ -1151,7 +1151,7 @@ public class Cpu {
      * None
      */
     private void nop() {
-
+        
     }
 
     /**
@@ -1172,12 +1172,12 @@ public class Cpu {
      */
     private void or_n(int value) {
         int result = a.getData() | value;
-
+        
         flagZ = result == 0;
         flagN = false;
         flagH = false;
         flagC = false;
-
+        
         a.load(value);
     }
 
@@ -1226,10 +1226,10 @@ public class Cpu {
      */
     private void res_b_r(Register reg, int bytePos) {
         int mask, regValue;
-
+        
         mask = ~(1 << bytePos);
         regValue = reg.getData();
-
+        
         reg.load(mask & regValue);
     }
 
@@ -1245,10 +1245,10 @@ public class Cpu {
      */
     private void res_b_r_HL_pointer(int bytePos) {
         int mask, regValue;
-
+        
         mask = ~(1 << bytePos);
         regValue = readCombinedRegisters(h, l);
-
+        
         loadCombinedRegisters(h, l, regValue & mask);
     }
 
@@ -1300,7 +1300,7 @@ public class Cpu {
      */
     private void reti() {
         pc.load(popSP());
-
+        
         InterruptController.getInstance().enableInterrupt();
     }
 
@@ -1322,15 +1322,15 @@ public class Cpu {
      */
     private void rl_n(Register reg) {
         int flagCValue, oldRegValue, newRegValue;
-
+        
         flagCValue = flagC ? 1 : 0;
         oldRegValue = reg.getData();
         newRegValue = ((oldRegValue << 1) | flagCValue) & 0xFF;
-
+        
         flagC = (oldRegValue >> 7) == 1;
-
+        
         reg.load(newRegValue);
-
+        
         flagZ = newRegValue == 0;
         flagN = false;
         flagH = false;
@@ -1354,17 +1354,17 @@ public class Cpu {
      */
     private void rl_n_HL_pointer() {
         int flagCValue, oldRegValue, newValue, address;
-
+        
         flagCValue = flagC ? 1 : 0;
         address = readCombinedRegisters(h, l);
         oldRegValue = memoryController.readByte(address);
-
+        
         newValue = ((oldRegValue << 1) | flagCValue) & 0xFF;
-
+        
         flagC = (oldRegValue >> 7) == 1;
-
+        
         memoryController.writeByte(address, newValue);
-
+        
         flagZ = newValue == 0;
         flagN = false;
         flagH = false;
@@ -1387,13 +1387,13 @@ public class Cpu {
      */
     private void rlc_n(Register reg) {
         int bit7Value, oldRegValue, newRegValue;
-
+        
         oldRegValue = reg.getData();
         bit7Value = (oldRegValue >> 7);
         newRegValue = ((oldRegValue << 1) | bit7Value) & 0xFF;
-
+        
         reg.load(newRegValue);
-
+        
         flagZ = newRegValue == 0;
         flagN = false;
         flagH = false;
@@ -1417,16 +1417,16 @@ public class Cpu {
      */
     private void rlc_n_HL_pointer() {
         int bit7Value, oldRegValue, newValue, address;
-
+        
         address = readCombinedRegisters(h, l);
         oldRegValue = memoryController.readByte(address);
-
+        
         bit7Value = (oldRegValue >> 7);
-
+        
         newValue = ((oldRegValue << 1) | bit7Value) & 0xFF;
-
+        
         memoryController.writeByte(address, newValue);
-
+        
         flagZ = newValue == 0;
         flagN = false;
         flagH = false;
@@ -1450,15 +1450,15 @@ public class Cpu {
      */
     private void rr_n(Register reg) {
         int flagCValue, oldRegValue, newRegValue;
-
+        
         flagCValue = flagC ? 1 : 0;
         oldRegValue = reg.getData();
         newRegValue = ((flagCValue << 7) | (oldRegValue >> 1)) & 0xFF;
-
+        
         flagC = (oldRegValue & 0x01) == 1;
-
+        
         reg.load(newRegValue);
-
+        
         flagZ = newRegValue == 0;
         flagN = false;
         flagH = false;
@@ -1481,22 +1481,504 @@ public class Cpu {
      */
     private void rr_n_HL_pointer() {
         int flagCValue, oldRegValue, newRegValue, address;
-
+        
         address = readCombinedRegisters(h, l);
         oldRegValue = memoryController.readByte(address);
-
+        
         flagCValue = flagC ? 1 : 0;
         newRegValue = ((flagCValue << 7) | (oldRegValue >> 1)) & 0xFF;
-
+        
         memoryController.writeByte(address, newRegValue);
-
+        
         flagZ = newRegValue == 0;
         flagN = false;
         flagH = false;
         flagC = (oldRegValue & 0x01) == 1;
     }
-    
-    
+
+    /**
+     * RRC n - Rotate n right. Old bit 0 to Carry flag.
+     *
+     * n = A,B,C,D,E,H,L
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 0 data.
+     */
+    private void rrc_n(Register reg) {
+        int oldRegValue, newRegValue, firstBitValue;
+        
+        oldRegValue = reg.getData();
+        firstBitValue = oldRegValue & 0x01;
+        
+        newRegValue = ((firstBitValue << 7) | (oldRegValue >> 1)) & 0xFF;
+        
+        flagC = firstBitValue == 1;
+        
+        reg.load(newRegValue);
+        
+        flagZ = newRegValue == 0;
+        flagN = false;
+        flagH = false;
+    }
+
+    /**
+     * RRC n - Rotate n right. Old bit 0 to Carry flag.
+     *
+     * n = HL)
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 0 data.
+     */
+    private void rrc_n_HL_pointer(Register reg) {
+        int firstBitValue, oldRegValue, newRegValue, address;
+        
+        address = readCombinedRegisters(h, l);
+        oldRegValue = memoryController.readByte(address);
+        
+        firstBitValue = oldRegValue & 0x01;
+        newRegValue = ((firstBitValue << 7) | (oldRegValue >> 1)) & 0xFF;
+        
+        memoryController.writeByte(address, newRegValue);
+        
+        flagZ = newRegValue == 0;
+        flagN = false;
+        flagH = false;
+        flagC = firstBitValue == 1;
+    }
+
+    /**
+     * RST n - Push present address onto stack.
+     *
+     * Jump to address $0000 + n.
+     *
+     * n = $00,$08,$10,$18,$20,$28,$30,$38
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void rst_n(int address) {
+        pushSP(pc.getData());
+        pc.load(address);
+    }
+
+    /**
+     * SBC A,n - Subtract n + Carry flag from A.
+     *
+     * n = A,B,C,D,E,H,L,(HL),#
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Set.
+     *
+     * H - Set if no borrow from bit 4.
+     *
+     * C - Set if no borrow.
+     */
+    private void sbc_A_n(int value) {
+        int result;
+        
+        result = a.getData() - value;
+        result -= flagC ? 1 : 0;
+        
+        flagZ = result <= 0;
+        flagN = true;
+        flagH = checkHalfBorrow(value, a.getData(), false);
+        flagC = checkBorrow(value, a.getData());
+        
+        if (result < 0 || result > 0xFF) {
+            result &= 0xFF;
+        }
+        
+        a.load(result);
+    }
+
+    /**
+     * SCF - Set Carry flag.
+     *
+     * Flags affected:
+     *
+     * Z - Not affected.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Set.
+     */
+    private void scf() {
+        flagN = false;
+        flagH = false;
+        flagC = true;
+    }
+
+    /**
+     * SET b,r - Set bit b in register r.
+     *
+     * b = 0-7, r = A,B,C,D,E,H,L
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void set_b_r(Register reg, int bitPos) {
+        int mask, regValue;
+        
+        mask = (1 << bitPos);
+        regValue = reg.getData();
+        
+        reg.load(mask | regValue);
+    }
+
+    /**
+     * SET b,r - Set bit b in register r.
+     *
+     * b = 0-7, r =(HL)
+     *
+     * Flags affected:
+     *
+     * None
+     */
+    private void set_b_r_HL_pointer(int bitPos) {
+        int mask, regValue;
+        
+        mask = (1 << bitPos);
+        regValue = readCombinedRegisters(h, l);
+        
+        loadCombinedRegisters(h, l, regValue | mask);
+    }
+
+    /**
+     * SLA n - Shift n left into Carry. LSBit of n set to 0.
+     *
+     * n = A,B,C,D,E,H,L
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 7 data.
+     *
+     */
+    private void sla_n(Register reg) {
+        int upperBitValue, result;
+        
+        upperBitValue = reg.getData() >> 7;
+        result = (reg.getData() << 1) & 0xFF;
+        
+        flagZ = result == 0;
+        flagN = false;
+        flagH = false;
+        flagC = upperBitValue == 1;
+        
+        reg.load(result);
+    }
+
+    /**
+     * SLA n - Shift n left into Carry. LSBit of n set to 0.
+     *
+     * n = (HL)
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 7 data.
+     *
+     */
+    private void sla_n_HL_pointer() {
+        int upperBitValue, result, address, addressValue;
+        
+        address = readCombinedRegisters(h, l);
+        addressValue = memoryController.readByte(address);
+        
+        upperBitValue = addressValue >> 7;
+        result = (addressValue << 1) & 0xFF;
+        
+        flagZ = result == 0;
+        flagN = false;
+        flagH = false;
+        flagC = upperBitValue == 1;
+        
+        memoryController.writeByte(address, result);
+    }
+
+    /**
+     * SRA n - Shift n right into Carry. MSBit doesn't change.
+     *
+     * n = A,B,C,D,E,H,L
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 0 data.
+     */
+    private void sra_n(Register reg) {
+        int lowerBitValue;
+        
+        lowerBitValue = reg.getData() & 0x01;
+        
+        flagZ = reg.getData() == 0;
+        flagN = false;
+        flagH = false;
+        flagC = lowerBitValue == 1;
+    }
+
+    /**
+     * SRA n - Shift n right into Carry. MSBit doesn't change.
+     *
+     * n = (HL)
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 0 data.
+     */
+    private void sra_n_HL_pointer() {
+        int lowerBitValue, address, addressValue;
+        
+        address = readCombinedRegisters(h, l);
+        addressValue = memoryController.readByte(address);
+        
+        lowerBitValue = addressValue & 0x01;
+        
+        flagZ = addressValue == 0;
+        flagN = false;
+        flagH = false;
+        flagC = lowerBitValue == 1;
+    }
+
+    /**
+     * SRL n - Shift n right into Carry. MSBit of n set to 0.
+     *
+     * n = A,B,C,D,E,H,L
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 0 data.
+     */
+    private void srl_n(Register reg) {
+        int result, lowerBitValue;
+        
+        lowerBitValue = reg.getData() & 0x01;
+        result = (reg.getData() >> 1) & 0xFF;
+        
+        flagZ = result == 0;
+        flagN = false;
+        flagH = false;
+        flagC = lowerBitValue == 1;
+        
+        reg.load(result);
+    }
+
+    /**
+     * SRL n - Shift n right into Carry. MSBit of n set to 0.
+     *
+     * n = (HL)
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Contains old bit 0 data.
+     */
+    private void srl_n_HL_pointer() {
+        int result, lowerBitValue, address, addressValue;
+        
+        address = readCombinedRegisters(h, l);
+        addressValue = memoryController.readByte(address);
+        
+        lowerBitValue = addressValue & 0x01;
+        result = (addressValue >> 1) & 0xFF;
+        
+        flagZ = result == 0;
+        flagN = false;
+        flagH = false;
+        flagC = lowerBitValue == 1;
+        
+        memoryController.writeByte(address, result);
+    }
+
+    /**
+     * STOP - ???
+     *
+     * Flags affected:
+     *
+     * ?
+     */
+    private void stop() {
+        
+    }
+
+    /**
+     * SUB n - Subtract n from A.
+     *
+     * n = A,B,C,D,E,H,L,(HL),#
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Set.
+     *
+     * H - Set if no borrow from bit 4.
+     *
+     * C - Set if no borrow.
+     *
+     */
+    private void sub_n(int value) {
+        int result;
+        
+        result = a.getData() - value;
+        
+        flagZ = result <= 0;
+        flagN = true;
+        flagH = checkHalfBorrow(value, a.getData(), false);
+        flagC = checkBorrow(value, a.getData());
+        
+        if (result < 0 || result > 0xFF) {
+            result &= 0xFF;
+        }
+        
+        a.load(result);
+    }
+
+    /**
+     * SWAP n - Swap upper & lower bits of n.
+     *
+     * n = A,B,C,D,E,H,L
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Reset.
+     */
+    private void swap_n(Register reg) {
+        int upper, lower, result;
+        
+        upper = reg.getData() >> 4;
+        lower = reg.getData() & 0b0000_1111;
+        
+        result = (lower << 4) | (upper);
+        
+        flagZ = result == 0;
+        flagN = false;
+        flagH = false;
+        flagC = false;
+        
+        reg.load(result);
+    }
+
+    /**
+     * SWAP n - Swap upper & lower bits of n.
+     *
+     * n = (HL)
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Reset.
+     */
+    private void swap_n_HL_pointer() {
+        int upper, lower, result, address, addressValue;
+        
+        address = readCombinedRegisters(h, l);
+        addressValue = memoryController.readByte(address);
+        
+        upper = addressValue >> 4;
+        lower = addressValue & 0b0000_1111;
+        
+        result = (lower << 4) | (upper);
+        
+        flagZ = result == 0;
+        flagN = false;
+        flagH = false;
+        flagC = false;
+        
+        memoryController.writeByte(address, result);
+    }
+
+    /**
+     * XOR n - Logical exclusive OR n with register A, result in A.
+     *
+     * n = A,B,C,D,E,H,L,(HL),#
+     *
+     * Flags affected:
+     *
+     * Z - Set if result is zero.
+     *
+     * N - Reset.
+     *
+     * H - Reset.
+     *
+     * C - Reset.
+     */
+    private void xor_n(int value) {
+        int result;
+        
+        result = a.getData() ^ value;
+        
+        flagZ = result == 0;
+        flagN = false;
+        flagH = false;
+        flagC = false;
+        
+        a.load(result); 
+    }
 
 //<editor-fold defaultstate="collapsed" desc="Util methods">
     /**
@@ -1527,7 +2009,7 @@ public class Cpu {
         if (newValue > 0xFFFF || newValue < 0) {
             newValue &= 0xFFFF;
         }
-
+        
         upper.load(newValue >> 8);
         lower.load(newValue & 0xff);
     }
@@ -1621,17 +2103,18 @@ public class Cpu {
      */
     private int getWordFromPClsFirst() {
         int lowerBits, upperBits;
-
+        
         lowerBits = memoryController.readByte(pc.getData());
         pc.increment();
         upperBits = memoryController.readByte(pc.getData());
         pc.increment();
-
+        
         return (upperBits << 8) | lowerBits;
     }
 
     /**
-     * Push the informed value into the stack pointer.
+     * Push the informed value into the stack pointer. Decrement stack pointer
+     * twice.
      *
      * @param value Value to be added
      */
@@ -1653,15 +2136,15 @@ public class Cpu {
      */
     private int popSP() {
         int lower, upper;
-
+        
         lower = memoryController.readByte(sp.getData());
         sp.increment();
-
+        
         upper = memoryController.readByte(sp.getData());
         sp.increment();
-
+        
         return (upper << 8) | lower;
-
+        
     }
 //</editor-fold>
 
@@ -1670,5 +2153,5 @@ public class Cpu {
         System.out.println("CPU INFO");
         System.out.println("");
     }
-
+    
 }
